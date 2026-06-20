@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity,
-  StyleSheet, Animated,
+  StyleSheet, Animated, Easing,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 const INITIAL_COUNT = 100;
-const RAINBOW = ['#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#3b82f6', '#eab308', '#ef4444'];
+// Punchy, candy-bright cartoon palette
+const RAINBOW = ['#7c3aed', '#22c55e', '#fb923c', '#f43f5e', '#3b82f6', '#facc15', '#fb7185'];
 
 function CounterDisplay({
   count, onAdd, onMinus, onReset,
@@ -15,30 +16,42 @@ function CounterDisplay({
   onAdd: () => void;
   onMinus: () => void;
   onReset: () => void;
-}) {
+}) 
+{
   const accentColor = RAINBOW[Math.abs(count) % RAINBOW.length];
   const diff = count - INITIAL_COUNT;
-  const diffText = diff === 0 ? 'back to start' : (diff > 0 ? `+${diff} from start` : `${diff} from start`);
+  const diffText = diff === 0 ? 'back to start! 🎯' : (diff > 0 ? `+${diff} from start 🚀` : `${diff} from start 📉`);
   const pct = Math.min(Math.max(((count - 50) / 100), 0), 1);
 
-  // Subtle pop whenever the count changes — keeps it feeling alive
-  // without being cartoonish.
+  // Big squashy bounce whenever the count changes — full cartoon
+  // "boing" instead of a subtle pop.
   const pop = useRef(new Animated.Value(1)).current;
+  const wiggle = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    pop.setValue(0.94);
-    Animated.spring(pop, {
-      toValue: 1,
-      speed: 22,
-      bounciness: 8,
-      useNativeDriver: true,
-    }).start();
+    pop.setValue(0.7);
+    wiggle.setValue(0);
+    Animated.parallel([
+      Animated.spring(pop, {
+        toValue: 1,
+        speed: 14,
+        bounciness: 18,
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.timing(wiggle, { toValue: 1, duration: 80, easing: Easing.linear, useNativeDriver: true }),
+        Animated.timing(wiggle, { toValue: -1, duration: 80, easing: Easing.linear, useNativeDriver: true }),
+        Animated.timing(wiggle, { toValue: 0, duration: 80, easing: Easing.linear, useNativeDriver: true }),
+      ]),
+    ]).start();
   }, [count]);
 
+  const rotate = wiggle.interpolate({ inputRange: [-1, 1], outputRange: ['-6deg', '6deg'] });
+
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { borderColor: accentColor }]}>
       <View style={styles.cardHeader}>
-        <View style={styles.tagPill}>
-          <Text style={styles.tagPillText}>CHILD · CounterDisplay</Text>
+        <View style={[styles.tagPill, { backgroundColor: accentColor }]}>
+          <Text style={styles.tagPillText}>🧩 CHILD · CounterDisplay</Text>
         </View>
         <Text style={styles.propsLine}>count · onAdd · onMinus · onReset</Text>
       </View>
@@ -46,35 +59,40 @@ function CounterDisplay({
       <View style={styles.countArea}>
         <Text style={styles.metaText}>↓ props.count</Text>
 
-        <Animated.Text
-          style={[
-            styles.countNum,
-            { color: accentColor, transform: [{ scale: pop }] },
-          ]}
-        >
-          {count}
-        </Animated.Text>
+        <View style={styles.countBubbleWrap}>
+          <View style={[styles.countBubbleShadow, { backgroundColor: accentColor }]} />
+          <Animated.View
+            style={[
+              styles.countBubble,
+              { borderColor: accentColor, transform: [{ scale: pop }, { rotate }] },
+            ]}
+          >
+            <Text style={[styles.countNum, { color: accentColor }]}>{count}</Text>
+          </Animated.View>
+        </View>
 
-        <View style={styles.barTrack}>
+        <View style={[styles.barTrack, { borderColor: accentColor }]}>
           <View style={[styles.barFill, { width: `${pct * 100}%`, backgroundColor: accentColor }]} />
         </View>
 
-        <Text style={[styles.stepHint, { color: accentColor }]}>{diffText}</Text>
+        <View style={[styles.hintBubble, { backgroundColor: accentColor }]}>
+          <Text style={styles.stepHint}>{diffText}</Text>
+        </View>
         <Text style={styles.metaText}>↑ props.onAdd · onMinus · onReset</Text>
       </View>
 
       <View style={styles.btnRow}>
         <HoldButton
-          label="Add"
-          icon="add"
+          label="ADD"
+          icon="add-circle"
           onPress={onAdd}
           style={styles.btnAdd}
           textStyle={styles.btnAddText}
           iconColor="#ffffff"
         />
         <HoldButton
-          label="Subtract"
-          icon="remove"
+          label="SUB"
+          icon="remove-circle"
           onPress={onMinus}
           style={styles.btnMinus}
           textStyle={styles.btnMinusText}
@@ -83,7 +101,7 @@ function CounterDisplay({
       </View>
 
       <TouchableOpacity style={styles.btnReset} onPress={onReset} activeOpacity={0.7}>
-        <Ionicons name="refresh" size={15} color="#71717a" />
+        <Ionicons name="refresh-circle" size={22} color="#7c3aed" />
         <Text style={styles.btnResetText}>Reset</Text>
       </TouchableOpacity>
     </View>
@@ -97,6 +115,7 @@ function HoldButton({ label, icon, onPress, style, textStyle, iconColor }: {
   const interval = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scale = useRef(new Animated.Value(1)).current;
+  const rotate = useRef(new Animated.Value(0)).current;
 
   const clearTimers = () => {
     if (timeout.current) {
@@ -113,18 +132,26 @@ function HoldButton({ label, icon, onPress, style, textStyle, iconColor }: {
   // freezing the app with runaway setState calls.
   useEffect(() => clearTimers, []);
 
-  const press = (to: number) => {
-    Animated.spring(scale, {
-      toValue: to,
-      speed: 28,
-      bounciness: 6,
-      useNativeDriver: true,
-    }).start();
+  const press = (to: number, rot: number) => {
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: to,
+        speed: 24,
+        bounciness: 14,
+        useNativeDriver: true,
+      }),
+      Animated.spring(rotate, {
+        toValue: rot,
+        speed: 24,
+        bounciness: 14,
+        useNativeDriver: true,
+      }),
+    ]).start();
   };
 
   const start = () => {
     clearTimers();
-    press(0.95);
+    press(0.88, -1);
     onPress();
     timeout.current = setTimeout(() => {
       interval.current = setInterval(onPress, 75);
@@ -132,14 +159,16 @@ function HoldButton({ label, icon, onPress, style, textStyle, iconColor }: {
   };
 
   const stop = () => {
-    press(1);
+    press(1, 0);
     clearTimers();
   };
 
+  const rot = rotate.interpolate({ inputRange: [-1, 1], outputRange: ['-4deg', '4deg'] });
+
   return (
-    <Animated.View style={{ flex: 1, transform: [{ scale }] }}>
+    <Animated.View style={{ flex: 1, transform: [{ scale }, { rotate: rot }] }}>
       <TouchableOpacity style={style} onPressIn={start} onPressOut={stop} activeOpacity={0.9}>
-        <Ionicons name={icon as any} size={18} color={iconColor} />
+        <Ionicons name={icon as any} size={26} color={iconColor} />
         <Text style={textStyle}>{label}</Text>
       </TouchableOpacity>
     </Animated.View>
@@ -153,16 +182,18 @@ export default function HomeScreen() {
     <View style={styles.shell}>
       <View style={styles.topRow}>
         <View style={styles.tagPillGhost}>
-          <Text style={styles.tagPillGhostText}>PARENT · index.tsx</Text>
+          <Text style={styles.tagPillGhostText}>🏠 PARENT · index.tsx</Text>
         </View>
       </View>
 
       <View style={styles.stateCard}>
         <View>
-          <Text style={styles.stateLabel}>STATE</Text>
+          <Text style={styles.stateLabel}>✨ STATE</Text>
           <Text style={styles.stateKey}>count</Text>
         </View>
-        <Text style={styles.stateValue}>{count}</Text>
+        <View style={styles.stateValueBubble}>
+          <Text style={styles.stateValue}>{count}</Text>
+        </View>
       </View>
 
       <CounterDisplay
@@ -178,96 +209,156 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   shell: {
     flex: 1,
-    backgroundColor: '#fafafa',
-    padding: 20,
-    paddingTop: 64,
-    gap: 16,
+    backgroundColor: '#fff7ed',
+    padding: 18,
+    paddingTop: 60,
+    gap: 14,
   },
 
   topRow: { flexDirection: 'row' },
   tagPillGhost: {
-    backgroundColor: '#f4f4f5',
+    backgroundColor: '#fde68a',
     borderRadius: 100,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderWidth: 3,
+    borderColor: '#18181b',
   },
-  tagPillGhostText: { color: '#a1a1aa', fontSize: 11, fontWeight: '600', letterSpacing: 0.6 },
+  tagPillGhostText: { color: '#18181b', fontSize: 12, fontWeight: '800', letterSpacing: 0.4 },
 
   stateCard: {
-    backgroundColor: '#18181b',
-    borderRadius: 24,
-    padding: 20,
+    backgroundColor: '#7c3aed',
+    borderRadius: 26,
+    padding: 18,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderWidth: 4,
+    borderColor: '#18181b',
+    shadowColor: '#18181b',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
-  stateLabel: { color: '#71717a', fontSize: 11, fontWeight: '700', letterSpacing: 1.4 },
-  stateKey: { color: '#fafafa', fontSize: 16, fontWeight: '600', marginTop: 2 },
-  stateValue: { color: '#fafafa', fontSize: 30, fontWeight: '700' },
+  stateLabel: { color: '#fde68a', fontSize: 12, fontWeight: '800', letterSpacing: 1.2 },
+  stateKey: { color: '#ffffff', fontSize: 18, fontWeight: '800', marginTop: 2 },
+  stateValueBubble: {
+    backgroundColor: '#ffffff',
+    borderRadius: 100,
+    width: 56,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#18181b',
+  },
+  stateValue: { color: '#7c3aed', fontSize: 22, fontWeight: '800' },
 
   card: {
     flex: 1,
     backgroundColor: '#ffffff',
-    borderRadius: 28,
-    padding: 22,
-    gap: 18,
-    shadowColor: '#000',
+    borderRadius: 32,
+    padding: 20,
+    gap: 16,
+    borderWidth: 5,
+    shadowColor: '#18181b',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.06,
-    shadowRadius: 24,
-    elevation: 3,
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
-  cardHeader: { gap: 6 },
+  cardHeader: { gap: 8 },
   tagPill: {
-    backgroundColor: '#f4f4f5',
     borderRadius: 100,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     alignSelf: 'flex-start',
+    borderWidth: 3,
+    borderColor: '#18181b',
   },
-  tagPillText: { color: '#52525b', fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
-  propsLine: { color: '#a1a1aa', fontSize: 12, fontWeight: '500' },
+  tagPillText: { color: '#ffffff', fontSize: 11, fontWeight: '800', letterSpacing: 0.6 },
+  propsLine: { color: '#a1a1aa', fontSize: 12, fontWeight: '600' },
 
-  countArea: { alignItems: 'center', gap: 10, paddingVertical: 14 },
-  metaText: { color: '#d4d4d8', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '600' },
-  countNum: { fontSize: 76, fontWeight: '700', lineHeight: 84, letterSpacing: -1 },
+  countArea: { alignItems: 'center', gap: 12, paddingVertical: 10 },
+  metaText: { color: '#d4d4d8', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '700' },
+
+  countBubbleWrap: { width: 200, height: 130, alignItems: 'center', justifyContent: 'center' },
+  countBubbleShadow: {
+    position: 'absolute',
+    width: 190,
+    height: 120,
+    borderRadius: 100,
+    top: 12,
+    left: 14,
+    opacity: 0.25,
+  },
+  countBubble: {
+    width: 190,
+    height: 120,
+    borderRadius: 100,
+    backgroundColor: '#ffffff',
+    borderWidth: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countNum: { fontSize: 56, fontWeight: '800', letterSpacing: -1 },
 
   barTrack: {
-    width: '85%', height: 8,
+    width: '85%', height: 16,
     backgroundColor: '#f4f4f5',
     borderRadius: 100, overflow: 'hidden',
+    borderWidth: 3,
   },
   barFill: { height: '100%', borderRadius: 100 },
-  stepHint: { fontSize: 13, fontWeight: '600' },
 
-  btnRow: { flexDirection: 'row', gap: 10 },
+  hintBubble: {
+    borderRadius: 100,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 3,
+    borderColor: '#18181b',
+  },
+  stepHint: { fontSize: 14, fontWeight: '800', color: '#ffffff' },
+
+  btnRow: { flexDirection: 'row', gap: 12 },
   btnAdd: {
-    backgroundColor: '#10b981',
-    borderRadius: 18,
-    paddingVertical: 16,
+    backgroundColor: '#22c55e',
+    borderRadius: 22,
+    paddingVertical: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 8,
+    borderWidth: 4,
+    borderColor: '#18181b',
+    shadowColor: '#18181b',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
-  btnAddText: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
+  btnAddText: { color: '#ffffff', fontSize: 17, fontWeight: '800', letterSpacing: 0.5 },
   btnMinus: {
-    backgroundColor: '#18181b',
-    borderRadius: 18,
-    paddingVertical: 16,
+    backgroundColor: '#f43f5e',
+    borderRadius: 22,
+    paddingVertical: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 8,
+    borderWidth: 4,
+    borderColor: '#18181b',
+    shadowColor: '#18181b',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
-  btnMinusText: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
+  btnMinusText: { color: '#ffffff', fontSize: 17, fontWeight: '800', letterSpacing: 0.5 },
 
   btnReset: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
-  btnResetText: { color: '#71717a', fontSize: 13, fontWeight: '600' },
+  btnResetText: { color: '#7c3aed', fontSize: 14, fontWeight: '800' },
 });
